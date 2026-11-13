@@ -222,9 +222,13 @@ class MultiWalletManager(private val context: Context) {
     /** Check if any wallet exists */
     fun hasWallet(): Boolean = getWalletIds().isNotEmpty()
     
-    /** Get active wallet's address for a coin type */
-    fun getAddress(coinType: CoinType): String? {
+    /** Get active wallet's address for a coin type. */
+    fun getAddress(coinType: CoinType, testnet: Boolean = false): String? {
         val walletId = getActiveWalletId() ?: return null
+        if (coinType == CoinType.BITCOIN && testnet) {
+            val pub = getPublicKey(coinType) ?: return null
+            return HDWallet.btcAddress(pub, testnet = true)
+        }
         return prefs.getString("wallet_${walletId}_addr_${coinType.name}", null)
     }
 
@@ -252,7 +256,7 @@ class MultiWalletManager(private val context: Context) {
         val encryptedSeed = encrypt(Base64.encodeToString(seed, Base64.NO_WRAP), "wallet_${walletId}_seed_iv")
         val editor = prefs.edit()
         editor.putString("wallet_${walletId}_seed", encryptedSeed)
-        val allKeys = HDWallet.deriveAllKeys(seed)
+        val allKeys = HDWallet.deriveAllKeys(null, seed)
         for ((coin, key) in allKeys) {
             editor.putString("wallet_${walletId}_addr_${coin.name}", key.address)
             editor.putString("wallet_${walletId}_pub_${coin.name}", Base64.encodeToString(key.publicKey, Base64.NO_WRAP))
@@ -289,6 +293,69 @@ class MultiWalletManager(private val context: Context) {
                     .putString("wallet_${walletId}_priv_COCO", encPriv)
                     .apply()
             }
+        }
+    }
+
+    /**
+     * Re-derive all coins with the standard schemes. Test builds <= 2.0.2 used
+     * a non-standard child derivation for BTC/ETH/SOL. Preserve the old keys
+     * under legacy_* so any test funds remain recoverable.
+     */
+    fun repairStandardDerivation() {
+        for (walletId in getWalletIds()) {
+            val mnemonic = try {
+                val enc = prefs.getString("wallet_${walletId}_mnemonic", null)
+                if (enc == null) null else decrypt(enc, "wallet_${walletId}_iv")
+            } catch (e: Exception) { null }
+
+            val seedEnc = prefs.getString("wallet_${walletId}_seed", null) ?: continue
+            val seed = try {
+                Base64.decode(decrypt(seedEnc, "wallet_${walletId}_seed_iv"), Base64.NO_WRAP)
+            } catch (e: Exception) { continue }
+            if (seed.size < 32) continue
+
+            val keys = HDWallet.deriveAllKeys(mnemonic, seed)
+            val editor = prefs.edit()
+            for ((coin, key) in keys) {
+                val oldAddr = prefs.getString("wallet_${walletId}_addr_${coin.name}", null)
+                if (oldAddr != null && oldAddr != key.address) {
+                    editor.putString("wallet_${walletId}_legacy_addr_${coin.name}", oldAddr)
+                    prefs.getString("wallet_${walletId}_priv_${coin.name}", null)?.let {
+                        editor.putString("wallet_${walletId}_legacy_priv_${coin.name}", it)
+                    }
+                    prefs.getString("wallet_${walletId}_pub_${coin.name}", null)?.let {
+                        editor.putString("wallet_${walletId}_legacy_pub_${coin.name}", it)
+                    }
+                }
+                editor.putString("wallet_${walletId}_addr_${coin.name}", key.address)
+                editor.putString("wallet_${walletId}_pub_${coin.name}", Base64.encodeToString(key.publicKey, Base64.NO_WRAP))
+                editor.putString(
+                    "wallet_${walletId}_priv_${coin.name}",
+                    encrypt(
+                        Base64.encodeToString(key.privateKey, Base64.NO_WRAP),
+                        "wallet_${walletId}_priv_iv_${coin.name}"
+                    )
+                )
+            }
+
+            if (mnemonic.isNullOrBlank()) {
+                // No BIP39 seed for raw-seed wallets; keep only CoCo visible.
+                for (coin in listOf(
+                    CoinType.BITCOIN, CoinType.ETHEREUM, CoinType.SOLANA,
+                    CoinType.USDC, CoinType.USDT
+                )) {
+                    prefs.getString("wallet_${walletId}_addr_${coin.name}", null)?.let {
+                        editor.putString("wallet_${walletId}_legacy_addr_${coin.name}", it)
+                    }
+                    prefs.getString("wallet_${walletId}_priv_${coin.name}", null)?.let {
+                        editor.putString("wallet_${walletId}_legacy_priv_${coin.name}", it)
+                    }
+                    editor.remove("wallet_${walletId}_addr_${coin.name}")
+                    editor.remove("wallet_${walletId}_pub_${coin.name}")
+                    editor.remove("wallet_${walletId}_priv_${coin.name}")
+                }
+            }
+            editor.apply()
         }
     }
 
@@ -376,7 +443,7 @@ class MultiWalletManager(private val context: Context) {
         editor.putString("wallet_${walletId}_seed", encryptedSeed)
         
         // Derive and save all coin keys
-        val allKeys = HDWallet.deriveAllKeys(seed)
+        val allKeys = HDWallet.deriveAllKeys(mnemonic, seed)
         for ((coin, key) in allKeys) {
             editor.putString("wallet_${walletId}_addr_${coin.name}", key.address)
             editor.putString("wallet_${walletId}_pub_${coin.name}", Base64.encodeToString(key.publicKey, Base64.NO_WRAP))

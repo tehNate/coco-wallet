@@ -31,6 +31,7 @@ class MainActivity : AppCompatActivity() {
         // upgraded install may not have a multi-wallet list yet.
         walletManager.migrateFromSingleWallet()
         walletManager.repairLegacyAddresses()
+        walletManager.repairStandardDerivation()
         walletManager.repairWalletProfiles()
         initFragments()
         setupBottomNavigation()

@@ -6,6 +6,7 @@ import org.bouncycastle.crypto.digests.SHA512Digest
 import org.bouncycastle.crypto.params.KeyParameter
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.text.Normalizer
 
 /**
  * On-device wallet using Ed25519 keys (MultiSignature::Ed25519 on Substrate).
@@ -2117,6 +2118,29 @@ class LocalWallet {
             generator.init(entropy, "mnemonic".toByteArray(), 2048)
             val params = generator.generateDerivedParameters(256) as KeyParameter
             return params.key
+        }
+
+        /**
+         * Standard BIP39 seed: PBKDF2-HMAC-SHA512(NFKD(mnemonic), "mnemonic", 2048) -> 64 bytes.
+         * This is the seed used by Bitcoin/Ethereum/Solana BIP44 wallets.
+         */
+        fun mnemonicToBip39Seed(mnemonic: String): ByteArray {
+            val normalized = Normalizer.normalize(mnemonic.trim(), Normalizer.Form.NFKD)
+            val generator = PKCS5S2ParametersGenerator(SHA512Digest())
+            generator.init(normalized.toByteArray(Charsets.UTF_8), "mnemonic".toByteArray(), 2048)
+            val params = generator.generateDerivedParameters(512) as KeyParameter
+            return params.key
+        }
+
+        fun bytesToHex(bytes: ByteArray): String =
+            bytes.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
+        fun hexToBytes(hex: String): ByteArray {
+            val clean = hex.removePrefix("0x")
+            require(clean.length % 2 == 0) { "hex length must be even" }
+            return ByteArray(clean.length / 2) {
+                clean.substring(it * 2, it * 2 + 2).toInt(16).toByte()
+            }
         }
 
         fun deriveKeyPair(seed: ByteArray): KeyPair {

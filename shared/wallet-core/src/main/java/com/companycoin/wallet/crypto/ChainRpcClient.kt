@@ -159,14 +159,55 @@ class EthereumRpcClient(private val rpcUrl: String, private val useTestnet: Bool
     override fun getTransactionHistory(address: String, coinType: CoinType): List<CoinTransaction> = emptyList()
     override fun getGasEstimate(from: String, to: String, amount: String, coinType: CoinType): String = "21000"
     override fun isValidAddress(address: String, coinType: CoinType) = address.matches(Regex("^0x[a-fA-F0-9]{40}$"))
-    override fun submitTransfer(privateKey: ByteArray, to: String, amount: String, coinType: CoinType): String? = null
+
+    override fun submitTransfer(privateKey: ByteArray, to: String, amount: String, coinType: CoinType): String? {
+        require(isValidAddress(to, coinType)) { "Invalid Ethereum recipient" }
+        val chainId = coinType.chainId(useTestnet) ?: 1L
+        val from = EthereumTx.addressFromPrivateKey(privateKey)
+        val nonceHex = jsonRpc("eth_getTransactionCount", listOf(from, "pending"))
+            ?.optString("result") ?: throw ApiException(0, "Cannot read Ethereum nonce")
+        val gasPriceHex = jsonRpc("eth_gasPrice", emptyList())
+            ?.optString("result") ?: throw ApiException(0, "Cannot read Ethereum gas price")
+        val nonce = nonceHex.removePrefix("0x").toBigInteger(16)
+        val gasPrice = gasPriceHex.removePrefix("0x").toBigInteger(16)
+        val value = EthereumTx.parseAmount(amount, coinType.decimals)
+
+        val txTo: String
+        val txValue: java.math.BigInteger
+        val data: String
+        val gasLimit: java.math.BigInteger
+        if (CoinType.isErc20(coinType)) {
+            txTo = coinType.getErc20Contract(useTestnet)
+                ?: throw ApiException(0, "ERC-20 contract is not configured")
+            txValue = java.math.BigInteger.ZERO
+            data = EthereumTx.erc20TransferData(to, value)
+            gasLimit = java.math.BigInteger.valueOf(65000)
+        } else {
+            txTo = to
+            txValue = value
+            data = "0x"
+            gasLimit = java.math.BigInteger.valueOf(21000)
+        }
+
+        val raw = EthereumTx.signTransfer(
+            privateKey, chainId, nonce, gasPrice, gasLimit, txTo, txValue, data
+        )
+        val resp = jsonRpc("eth_sendRawTransaction", listOf(raw))
+            ?: throw ApiException(0, "Ethereum RPC did not respond")
+        val error = resp.optJSONObject("error")
+        if (error != null) throw ApiException(0, error.optString("message", error.toString()))
+        return resp.optString("result").ifBlank { null }
+    }
 }
 
-class BitcoinRpcClient(private val apiUrl: String) : ChainRpcClient {
+class BitcoinRpcClient(
+    private val apiUrl: String,
+    private val useTestnet: Boolean = false,
+) : ChainRpcClient {
 
     private val client = SharedHttpClient.instance
 
-    private fun get(path: String): JSONObject? {
+    private fun getObject(path: String): JSONObject? {
         return try {
             val req = Request.Builder().url("$apiUrl$path").get().build()
             val resp = client.newCall(req).execute()
@@ -175,8 +216,17 @@ class BitcoinRpcClient(private val apiUrl: String) : ChainRpcClient {
         } catch (e: Exception) { null }
     }
 
+    private fun getArray(path: String): JSONArray? {
+        return try {
+            val req = Request.Builder().url("$apiUrl$path").get().build()
+            val resp = client.newCall(req).execute()
+            if (!resp.isSuccessful) null
+            else JSONArray(resp.body!!.string())
+        } catch (e: Exception) { null }
+    }
+
     override fun getBalance(address: String, coinType: CoinType): String {
-        val resp = get("/address/$address") ?: return "0"
+        val resp = getObject("/address/$address") ?: return "0"
         val stats = resp.optJSONObject("address") ?: resp
         val funded = stats.optJSONObject("chain_stats")?.optString("funded_txo_sum", "0") ?: "0"
         val spent = stats.optJSONObject("chain_stats")?.optString("spent_txo_sum", "0") ?: "0"
@@ -186,9 +236,35 @@ class BitcoinRpcClient(private val apiUrl: String) : ChainRpcClient {
     }
 
     override fun getTransactionHistory(address: String, coinType: CoinType): List<CoinTransaction> = emptyList()
-    override fun getGasEstimate(from: String, to: String, amount: String, coinType: CoinType): String = "150"
-    override fun isValidAddress(address: String, coinType: CoinType) = address.matches(Regex("^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^(bc1)[a-zA-HJ-NP-Z0-9]{39,59}$"))
-    override fun submitTransfer(privateKey: ByteArray, to: String, amount: String, coinType: CoinType): String? = null
+    override fun getGasEstimate(from: String, to: String, amount: String, coinType: CoinType): String = "10"
+    override fun isValidAddress(address: String, coinType: CoinType) =
+        BitcoinTx.scriptPubKey(address, useTestnet) != null
+
+    override fun submitTransfer(privateKey: ByteArray, to: String, amount: String, coinType: CoinType): String? {
+        val from = HDWallet.btcAddress(HDWallet.compressedPublicKey(privateKey), useTestnet)
+        val amountSats = BitcoinTx.parseAmountToSats(amount, coinType.decimals)
+        val utxoArray = getArray("/address/$from/utxo")
+            ?: throw ApiException(0, "Cannot load BTC UTXOs")
+        val utxos = mutableListOf<BitcoinTx.Utxo>()
+        for (i in 0 until utxoArray.length()) {
+            val o = utxoArray.getJSONObject(i)
+            utxos.add(BitcoinTx.Utxo(o.getString("txid"), o.getLong("vout"), o.getLong("value")))
+        }
+        val feeRate = getObject("/v1/fees/recommended")?.optLong("halfHourFee", 10L) ?: 10L
+        val raw = BitcoinTx.buildSignedTransaction(
+            privateKey, from, to, amountSats, utxos, feeRate, useTestnet
+        )
+        val req = Request.Builder()
+            .url("$apiUrl/tx")
+            .post(raw.toRequestBody("text/plain".toMediaType()))
+            .build()
+        val resp = client.newCall(req).execute()
+        val body = resp.body?.string() ?: ""
+        if (!resp.isSuccessful) {
+            throw ApiException(resp.code, body.ifBlank { "BTC broadcast failed" })
+        }
+        return body.trim().ifBlank { BitcoinTx.txid(raw) }
+    }
 }
 
 class SolanaRpcClient(private val rpcUrl: String) : ChainRpcClient {
@@ -218,6 +294,35 @@ class SolanaRpcClient(private val rpcUrl: String) : ChainRpcClient {
 
     override fun getTransactionHistory(address: String, coinType: CoinType): List<CoinTransaction> = emptyList()
     override fun getGasEstimate(from: String, to: String, amount: String, coinType: CoinType): String = "5000"
-    override fun isValidAddress(address: String, coinType: CoinType) = address.matches(Regex("^[1-9A-HJ-NP-Za-km-z]{32,44}$"))
-    override fun submitTransfer(privateKey: ByteArray, to: String, amount: String, coinType: CoinType): String? = null
+    override fun isValidAddress(address: String, coinType: CoinType) =
+        LocalWallet.base58Decode(address)?.size == 32
+
+    override fun submitTransfer(privateKey: ByteArray, to: String, amount: String, coinType: CoinType): String? {
+        val toBytes = LocalWallet.base58Decode(to)
+            ?: throw ApiException(0, "Invalid Solana recipient")
+        require(toBytes.size == 32) { "Invalid Solana recipient" }
+        val lamports = SolanaTx.parseAmountToLamports(amount)
+
+        val blockhashResp = post(JSONObject().apply {
+            put("jsonrpc", "2.0"); put("id", 1); put("method", "getLatestBlockhash")
+            put("params", JSONArray().put(JSONObject().put("commitment", "confirmed")))
+        }) ?: throw ApiException(0, "Solana RPC did not return a blockhash")
+        val blockhash = blockhashResp.optJSONObject("result")
+            ?.optJSONObject("value")?.optString("blockhash").orEmpty()
+        if (blockhash.isBlank()) throw ApiException(0, "Solana blockhash missing")
+        val blockhashBytes = LocalWallet.base58Decode(blockhash)
+            ?: throw ApiException(0, "Invalid Solana blockhash")
+
+        val built = SolanaTx.buildTransfer(privateKey, toBytes, lamports, blockhashBytes)
+        val resp = post(JSONObject().apply {
+            put("jsonrpc", "2.0"); put("id", 1); put("method", "sendTransaction")
+            put("params", JSONArray().put(built.base64).put(JSONObject().apply {
+                put("encoding", "base64")
+                put("preflightCommitment", "confirmed")
+            }))
+        }) ?: throw ApiException(0, "Solana RPC did not respond")
+        val error = resp.optJSONObject("error")
+        if (error != null) throw ApiException(0, error.optString("message", error.toString()))
+        return resp.optString("result").ifBlank { built.signatureBase58 }
+    }
 }

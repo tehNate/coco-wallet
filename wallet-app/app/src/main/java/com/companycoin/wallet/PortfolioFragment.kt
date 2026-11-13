@@ -30,8 +30,11 @@ class PortfolioFragment : Fragment() {
             return layout
         }
 
+        val useTestnet = requireContext()
+            .getSharedPreferences("wallet_prefs", 0)
+            .getBoolean("testnet_mode", false)
         for (coin in CoinType.entries) {
-            val addr = wm.getAddress(coin) ?: continue
+            val addr = wm.getAddress(coin, useTestnet) ?: continue
             val row = LinearLayout(requireContext())
             row.orientation = LinearLayout.HORIZONTAL
             row.setPadding(0, 16, 0, 16)

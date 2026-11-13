@@ -31,6 +31,7 @@ class WalletFragment : Fragment() {
     private var selectedCoin: CoinType = CoinType.COCO
     private var rpcClients = mutableMapOf<CoinType, ChainRpcClient>()
     private var coinButtons = mutableMapOf<CoinType, Button>()
+    private var useTestnet = false
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = FragmentWalletBinding.inflate(inflater, container, false)
@@ -59,11 +60,11 @@ class WalletFragment : Fragment() {
 
     fun rebuildRpcClients() {
         val prefs = requireContext().getSharedPreferences("wallet_prefs", 0)
-        val useTestnet = prefs.getBoolean("testnet_mode", false)
+        useTestnet = prefs.getBoolean("testnet_mode", false)
         binding.testnetBadge.visibility = if (useTestnet) View.VISIBLE else View.GONE
 
         rpcClients[CoinType.ETHEREUM] = EthereumRpcClient(CoinType.ETHEREUM.rpc(useTestnet), useTestnet)
-        rpcClients[CoinType.BITCOIN] = BitcoinRpcClient(CoinType.BITCOIN.rpc(useTestnet))
+        rpcClients[CoinType.BITCOIN] = BitcoinRpcClient(CoinType.BITCOIN.rpc(useTestnet), useTestnet)
         rpcClients[CoinType.SOLANA] = SolanaRpcClient(CoinType.SOLANA.rpc(useTestnet))
         rpcClients[CoinType.COCO] = CoCoChainClient(
             if (useTestnet) CoinType.COCO.testnetRpc else ServerConfig.base(requireContext()),
@@ -101,14 +102,14 @@ class WalletFragment : Fragment() {
         binding.balanceAmount.text = "—"
         binding.balanceUsd.text = ""
         if (walletManager.hasWallet()) {
-            binding.walletAddress.text = walletManager.getAddress(coin) ?: "—"
+            binding.walletAddress.text = walletManager.getAddress(coin, useTestnet) ?: "—"
             refreshBalance()
         } else binding.walletAddress.text = "No wallet"
     }
 
     private fun refreshBalance() {
         if (!walletManager.hasWallet()) return
-        val addr = walletManager.getAddress(selectedCoin) ?: return
+        val addr = walletManager.getAddress(selectedCoin, useTestnet) ?: return
         val client = rpcClients[selectedCoin] ?: return
         binding.balanceAmount.text = "Loading..."
         lifecycleScope.launch {
@@ -188,7 +189,7 @@ class WalletFragment : Fragment() {
     }
 
     private fun onReceive() {
-        val addr = walletManager.getAddress(selectedCoin) ?: run {
+        val addr = walletManager.getAddress(selectedCoin, useTestnet) ?: run {
             Toast.makeText(context, "Create wallet first", Toast.LENGTH_SHORT).show(); return
         }
         runCatching {
@@ -225,7 +226,7 @@ class WalletFragment : Fragment() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 val mnemonic = walletManager.getMnemonic() ?: return
                 val addrs = CoinType.entries.joinToString("\n") { c ->
-                    "${c.symbol}: ${walletManager.getAddress(c) ?: "—"}"
+                    "${c.symbol}: ${walletManager.getAddress(c, useTestnet) ?: "—"}"
                 }
 
                 val addrView = android.widget.TextView(requireContext()).apply {

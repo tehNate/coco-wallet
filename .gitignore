@@ -17,3 +17,5 @@ captures/
 *.pem
 *.key
 .env
+**/local.properties
+

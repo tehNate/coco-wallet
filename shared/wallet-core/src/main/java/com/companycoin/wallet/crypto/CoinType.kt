@@ -14,6 +14,8 @@ enum class CoinType(
     val decimals: Int,
     val erc20Contract: String? = null,
     val testnetErc20Contract: String? = null,
+    val chainId: Long? = null,
+    val testnetChainId: Long? = null,
 ) {
     COCO(
         displayName = "CoCo",
@@ -53,6 +55,8 @@ enum class CoinType(
         testnetExplorerUrl = "https://sepolia.etherscan.io/tx/",
         symbol = "ETH",
         decimals = 18,
+        chainId = 1,
+        testnetChainId = 11155111,
     ),
     SOLANA(
         displayName = "Solana",
@@ -81,6 +85,8 @@ enum class CoinType(
         decimals = 6,
         erc20Contract = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         testnetErc20Contract = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+        chainId = 1,
+        testnetChainId = 11155111,
     ),
     USDT(
         displayName = "Tether",
@@ -96,11 +102,14 @@ enum class CoinType(
         decimals = 6,
         erc20Contract = "0xdAC17F958D2ee523a2206206994597C13D831ec7",
         testnetErc20Contract = "0xaa8E23Fb1079bE71E7c400E9893EfF2B59B3fC0d",
+        chainId = 1,
+        testnetChainId = 11155111,
     );
 
     fun rpc(useTestnet: Boolean): String = if (useTestnet) testnetRpc else defaultRpc
     fun explorer(useTestnet: Boolean): String = if (useTestnet) testnetExplorerUrl else explorerUrl
     fun getErc20Contract(useTestnet: Boolean): String? = if (useTestnet) testnetErc20Contract else erc20Contract
+    fun chainId(useTestnet: Boolean): Long? = if (useTestnet) testnetChainId else chainId
 
     companion object {
         fun fromSymbol(symbol: String): CoinType? = entries.find { it.symbol == symbol.uppercase() }

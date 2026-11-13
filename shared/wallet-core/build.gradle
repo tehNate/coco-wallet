@@ -29,7 +29,9 @@ dependencies {
     implementation 'androidx.security:security-crypto:1.0.0'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'org.bouncycastle:bcprov-jdk15on:1.70'
+    implementation('org.web3j:core:4.12.0') { exclude group: 'org.bouncycastle' }
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'
+    testImplementation 'org.bitcoinj:bitcoinj-core:0.16.3'
 }

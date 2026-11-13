@@ -2,46 +2,39 @@
 
 Standalone Android wallet for the CoCo / Company Coin ecosystem.
 
-> **Status: test build with incomplete multi-chain support.**
-> Do not use this build to receive BTC, ETH, SOL, USDC, or USDT yet.
-> Non-CoCo sending is not implemented, and the current ETH receive-address
-> derivation is incorrect. See **Known limitations** below.
-
 - **Package:** `com.companycoin.wallet`
-- **Version:** 2.0.2 (versionCode 5)
+- **Version:** 2.1.0 (versionCode 6)
 - **Min SDK:** 24
 - **Target SDK:** 34
 - **License:** GNU General Public License v3.0
-- **Tested APK:** `ANDROID/coco-wallet-2.0.2-debug.apk`
+- **Tested APK:** `ANDROID/coco-wallet-2.1.0-debug.apk`
 
 ## Supported functionality
 
 | Asset | Balance / receive address | Send |
 |---|---|---|
 | **CoCo (COCO)** | Yes | Yes — server-assisted, signed on-device |
-| Bitcoin (BTC) | Yes | **Not implemented** |
-| Ethereum (ETH) | Yes | **Not implemented** |
-| Solana (SOL) | Yes | **Not implemented** |
-| USDC / USDT (ERC-20) | Yes | **Not implemented** |
+| Bitcoin (BTC) | Yes | Yes — legacy P2PKH inputs; P2PKH, P2SH, and bech32 outputs |
+| Ethereum (ETH) | Yes | Yes — EIP-155 native transfer |
+| Solana (SOL) | Yes | Yes — SystemProgram transfer |
+| USDC / USDT (ERC-20) | Yes | Yes — ERC-20 `transfer` |
 
-The CoCo send path signs the payload on-device and uses the CoCo website API to
-prepare and submit the transfer. The seed never leaves the device.
+CoCo signing happens on-device; the CoCo website API prepares and submits the
+transfer. BTC uses mempool.space for UTXOs, fees, and broadcast. ETH/ERC-20 uses
+the configured JSON-RPC endpoint. SOL uses the configured Solana RPC.
 
-## Known limitations
+## Derivation
 
-- **Non-CoCo sending is not implemented.** The Bitcoin, Ethereum, and Solana
-  clients return `null` from `submitTransfer`; the Send button will fail for
-  those assets.
-- **The BTC/ETH/SOL derivation is not standard BIP44/BIP39.** The app uses
-  Substrate's `mnemonicToMiniSecret` and a custom child-key derivation. The same
-  seed phrase imported into MetaMask, Electrum, Phantom, or another BIP44 wallet
-  will produce different addresses. Do not import the seed elsewhere expecting
-  the same BTC/ETH/SOL addresses.
-- **The current ETH receive address is incorrect.** The derivation hashes the
-  uncompressed public key including the `0x04` prefix. The displayed ETH address
-  is not the standard Ethereum address for the key. Do not send ETH to it.
-- **This is a debug/test build.** It has not been independently audited. Do not
-  use it to hold funds you cannot afford to lose.
+- **CoCo:** Substrate `mnemonicToMiniSecret` + Ed25519, SS58 address.
+- **BTC/ETH/USDC/USDT:** standard BIP39 seed + BIP32:
+  - BTC `m/44'/0'/0'/0/0`
+  - ETH `m/44'/60'/0'/0/0`
+- **SOL:** standard BIP39 seed + SLIP-0010:
+  - `m/44'/501'/0'/0'/0'`
+
+The BTC/ETH/SOL addresses match MetaMask, Electrum, and Phantom for the same
+mnemonic. Wallets created by test builds <= 2.0.2 are re-derived on first launch;
+the old non-standard keys are preserved under `legacy_*` preferences.
 
 ## Build
 
@@ -65,9 +58,32 @@ cd wallet-app
 ./gradlew :wallet-core:test
 ```
 
-The current unit tests cover CoCo/Ed25519 derivation, mnemonic validation, SS58
-encoding, and sign/verify. The live API/send tests require environment variables
-and are skipped by default. There are no BTC/ETH/SOL derivation or send tests.
+The offline suite covers CoCo/Ed25519, standard BIP39/BIP32/SLIP-0010 vectors,
+ETH address/signing, BTC P2PKH transaction signing (verified with bitcoinj), and
+Solana message/signature construction.
+
+Opt-in live checks:
+
+```bash
+# Read-only Sepolia / BTC testnet / Solana devnet + Solana devnet simulation
+MULTICHAIN_LIVE_TEST=1 ./gradlew :wallet-core:testDebugUnitTest \
+  --tests 'com.companycoin.wallet.crypto.LiveMultiChainTest'
+
+# Real Solana devnet send; fund the key at https://faucet.solana.com first
+SOLANA_LIVE_TEST=1 SOLANA_TEST_PRIVATE_KEY=<64-hex> ./gradlew :wallet-core:testDebugUnitTest \
+  --tests 'com.companycoin.wallet.crypto.LiveMultiChainTest'
+```
+
+## Known limitations
+
+- Beta/debug build. It has not been independently audited.
+- BTC sends from legacy P2PKH inputs. No RBF/CPFP, and the fee estimate is
+  conservative rather than exact.
+- ETH uses legacy `gasPrice`, not EIP-1559. ERC-20 sends use a fixed gas limit.
+- Solana uses the standard 5,000-lamport fee; no priority fee.
+- Transaction history is not shown in the UI.
+- The testnet toggle uses the same seed material. Do not reuse a mainnet seed for
+  testnet, and do not send real funds to testnet addresses.
 
 ## License
 
