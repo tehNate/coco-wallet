@@ -3,11 +3,11 @@
 Standalone Android wallet for the CoCo / Company Coin ecosystem.
 
 - **Package:** `com.companycoin.wallet`
-- **Version:** 2.1.1 (versionCode 7)
+- **Version:** 2.1.2 (versionCode 8)
 - **Min SDK:** 24
 - **Target SDK:** 34
 - **License:** GNU General Public License v3.0
-- **Tested APK:** `ANDROID/coco-wallet-2.1.1-debug.apk`
+- **Tested APK:** `ANDROID/coco-wallet-2.1.2-debug.apk`
 
 ## Supported functionality
 
@@ -33,8 +33,9 @@ The successful test used the beta gateway:
 
 **Settings → Use beta server (cocoio.cc)**
 
-The production `companycoin.org` gateway timed out for sends during this test and
-is being revalidated. Use the beta gateway until the production path is confirmed.
+v2.1.2 now defaults to that beta gateway. The production `companycoin.org`
+gateway timed out for sends during this test and is being revalidated. You can
+switch back to production in Settings once it is confirmed.
 
 BTC, ETH, and SOL are implemented and covered by offline vector tests and a
 Solana devnet simulation, but they have not been mainnet-tested. They are marked
@@ -45,6 +46,11 @@ Solana devnet simulation, but they have not been mainnet-tested. They are marked
 COCO balance responses are now converted from human COCO to planck before the
 UI applies its decimal formatting. This fixes an integer COCO balance showing as
 `0.000000` (for example, 10 COCO now displays as `10.000000`).
+
+### 2.1.2 default gateway
+
+The beta gateway (`https://cocoio.cc`) is now the default while the production
+`companycoin.org` send gateway is revalidated. The tested send path is unchanged.
 
 ## Derivation
 

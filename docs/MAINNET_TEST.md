@@ -1,8 +1,13 @@
 # CoCo Wallet — Mainnet Test
 
 **Date:** 2026-11-16  
-**App:** CoCo Wallet 2.1.1 (versionCode 7)  
-**APK SHA256:** `668f62cc327f1630f308a95d09fd4831c1f9b6eb4bbd964f3443117850370a50`
+**App tested:** CoCo Wallet 2.1.1 (versionCode 7)  
+**APK SHA256 (tested):** `668f62cc327f1630f308a95d09fd4831c1f9b6eb4bbd964f3443117850370a50`
+
+v2.1.2 (versionCode 8) keeps the same tested send path and changes the default
+gateway to the beta server used in this test.
+
+**APK SHA256 (v2.1.2):** `eae36fa15fc7e4dc03f39f3aff948db94bfc9c9f8869d2764ae2eedc1e6eeb18`
 
 ## Wallet
 

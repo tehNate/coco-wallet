@@ -17,8 +17,11 @@ object ServerConfig {
     private const val KEY = "coco_server"
 
     fun base(context: Context): String {
-        val value = context.getSharedPreferences(PREFS, 0).getString(KEY, PRODUCTION)
-        return if (value.isNullOrBlank()) PRODUCTION else value
+        // The production companycoin.org send gateway timed out during the
+        // 2026-11-16 mainnet test. Default to the working beta gateway until
+        // the production path is revalidated. Users can still switch in Settings.
+        val value = context.getSharedPreferences(PREFS, 0).getString(KEY, BETA)
+        return if (value.isNullOrBlank()) BETA else value
     }
 
     fun setBase(context: Context, value: String) {
