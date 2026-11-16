@@ -14,14 +14,31 @@ Standalone Android wallet for the CoCo / Company Coin ecosystem.
 | Asset | Balance / receive address | Send |
 |---|---|---|
 | **CoCo (COCO)** | Yes | Yes — server-assisted, signed on-device |
-| Bitcoin (BTC) | Yes | Yes — legacy P2PKH inputs; P2PKH, P2SH, and bech32 outputs |
-| Ethereum (ETH) | Yes | Yes — EIP-155 native transfer |
-| Solana (SOL) | Yes | Yes — SystemProgram transfer |
-| USDC / USDT (ERC-20) | Yes | Yes — ERC-20 `transfer` |
+| Bitcoin (BTC) | Yes | Implemented — mainnet testing pending |
+| Ethereum (ETH) | Yes | Implemented — mainnet testing pending |
+| Solana (SOL) | Yes | Implemented — mainnet testing pending |
+| USDC / USDT (ERC-20) | Yes | Implemented — mainnet testing pending |
 
 CoCo signing happens on-device; the CoCo website API prepares and submits the
 transfer. BTC uses mempool.space for UTXOs, fees, and broadcast. ETH/ERC-20 uses
 the configured JSON-RPC endpoint. SOL uses the configured Solana RPC.
+
+## Mainnet status (2026-11-16)
+
+CoCo send/receive was verified on CoCo mainnet with a real 1 COCO transfer.
+See [`docs/MAINNET_TEST.md`](docs/MAINNET_TEST.md) for the addresses, tx hashes,
+and block proof.
+
+The successful test used the beta gateway:
+
+**Settings → Use beta server (cocoio.cc)**
+
+The production `companycoin.org` gateway timed out for sends during this test and
+is being revalidated. Use the beta gateway until the production path is confirmed.
+
+BTC, ETH, and SOL are implemented and covered by offline vector tests and a
+Solana devnet simulation, but they have not been mainnet-tested. They are marked
+**coming soon** in the release announcement.
 
 ### 2.1.1 fix
 
@@ -68,6 +85,9 @@ The offline suite covers CoCo/Ed25519, standard BIP39/BIP32/SLIP-0010 vectors,
 ETH address/signing, BTC P2PKH transaction signing (verified with bitcoinj), and
 Solana message/signature construction.
 
+A real CoCo mainnet send/receive test is documented in
+[`docs/MAINNET_TEST.md`](docs/MAINNET_TEST.md).
+
 Opt-in live checks:
 
 ```bash
@@ -83,6 +103,9 @@ SOLANA_LIVE_TEST=1 SOLANA_TEST_PRIVATE_KEY=<64-hex> ./gradlew :wallet-core:testD
 ## Known limitations
 
 - Beta/debug build. It has not been independently audited.
+- The production `companycoin.org` send gateway timed out during the 2026-11-16
+  test. Use the beta gateway (`cocoio.cc`) until the production path is
+  revalidated.
 - BTC sends from legacy P2PKH inputs. No RBF/CPFP, and the fee estimate is
   conservative rather than exact.
 - ETH uses legacy `gasPrice`, not EIP-1559. ERC-20 sends use a fixed gas limit.
