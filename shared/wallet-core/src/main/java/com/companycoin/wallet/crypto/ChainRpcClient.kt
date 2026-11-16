@@ -73,7 +73,14 @@ class CoCoChainClient(private val serverUrl: String, private val authToken: Stri
     override fun getBalance(address: String, coinType: CoinType): String {
         val resp = post("/api/chain/mainnet/balance", JSONObject().apply { put("address", address) })
         return if (coinType == CoinType.COCO) {
-            resp.optString("coco", "0")
+            try {
+                java.math.BigDecimal(resp.optString("coco", "0"))
+                    .movePointRight(coinType.decimals)
+                    .toBigIntegerExact()
+                    .toString()
+            } catch (e: Exception) {
+                "0"
+            }
         } else {
             val assets = resp.optJSONArray("bridgedAssets")
             if (assets != null) for (i in 0 until assets.length()) {

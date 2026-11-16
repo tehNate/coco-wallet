@@ -3,11 +3,11 @@
 Standalone Android wallet for the CoCo / Company Coin ecosystem.
 
 - **Package:** `com.companycoin.wallet`
-- **Version:** 2.1.0 (versionCode 6)
+- **Version:** 2.1.1 (versionCode 7)
 - **Min SDK:** 24
 - **Target SDK:** 34
 - **License:** GNU General Public License v3.0
-- **Tested APK:** `ANDROID/coco-wallet-2.1.0-debug.apk`
+- **Tested APK:** `ANDROID/coco-wallet-2.1.1-debug.apk`
 
 ## Supported functionality
 
@@ -22,6 +22,12 @@ Standalone Android wallet for the CoCo / Company Coin ecosystem.
 CoCo signing happens on-device; the CoCo website API prepares and submits the
 transfer. BTC uses mempool.space for UTXOs, fees, and broadcast. ETH/ERC-20 uses
 the configured JSON-RPC endpoint. SOL uses the configured Solana RPC.
+
+### 2.1.1 fix
+
+COCO balance responses are now converted from human COCO to planck before the
+UI applies its decimal formatting. This fixes an integer COCO balance showing as
+`0.000000` (for example, 10 COCO now displays as `10.000000`).
 
 ## Derivation
 

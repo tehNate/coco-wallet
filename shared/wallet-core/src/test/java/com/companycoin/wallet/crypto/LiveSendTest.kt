@@ -4,6 +4,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import java.math.BigInteger
 
 /**
  * One-shot live COCO send using the real app wallet code (offline Ed25519 sign
@@ -24,24 +25,32 @@ class LiveSendTest {
         val to = LocalWallet.deriveKeyPair(LocalWallet.mnemonicToSeed(toPhrase))
 
         val client = CoCoChainClient(base, null)
-        val start = client.getBalance(from.address, CoinType.COCO)
-        assertTrue("from balance: $start", start.toDouble() >= 0.1)
+        val startPlanck = client.getBalance(from.address, CoinType.COCO)
+            .toBigIntegerOrNull() ?: BigInteger.ZERO
+        assertTrue(
+            "from balance planck: $startPlanck",
+            startPlanck >= BigInteger("100000000000") // 0.1 COCO
+        )
 
         val tx = client.submitTransfer(from.privateKey, to.address, "0.1", CoinType.COCO)
         assertNotNull("tx hash", tx)
 
-        var received = "0"
+        var receivedPlanck = BigInteger.ZERO
         for (i in 0 until 30) {
             Thread.sleep(2000)
-            received = client.getBalance(to.address, CoinType.COCO)
-            if (received.toDouble() >= 0.09) break
+            receivedPlanck = client.getBalance(to.address, CoinType.COCO)
+                .toBigIntegerOrNull() ?: BigInteger.ZERO
+            if (receivedPlanck >= BigInteger("90000000000")) break // 0.09 COCO
         }
-        assertTrue("recipient balance: $received", received.toDouble() >= 0.09)
-        println("LIVE SEND OK from=${from.address} to=${to.address} tx=$tx received=$received")
+        assertTrue(
+            "recipient balance planck: $receivedPlanck",
+            receivedPlanck >= BigInteger("90000000000")
+        )
+        println("LIVE SEND OK from=${from.address} to=${to.address} tx=$tx received=$receivedPlanck planck")
         // Do not persist the recipient mnemonic; the proof only needs public data.
         val receipt = java.io.File("/tmp/opencode/app-send-receipt.json")
         receipt.writeText(
-            """{"from":"${from.address}","to":"${to.address}","tx":"$tx","received":"$received"}"""
+            """{"from":"${from.address}","to":"${to.address}","tx":"$tx","received_planck":"$receivedPlanck"}"""
         )
         receipt.setReadable(false, false)
         receipt.setReadable(true, true)
